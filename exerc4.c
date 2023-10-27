@@ -6,14 +6,21 @@
 
 
 /*
-    2° Gerar 2 matrizes e ralizar a soma entre elas em uma terceira matriz, onde cada linha será calculada em um processo
+    Trabalho 2 - Gerar 2 matrizes e ralizar a MULTIPLICAÇÃO entre elas em uma terceira matriz, 
+    onde cada linha será calculada em um processo.
+
+    Aluno: Renan Magalhães Lage - R.A.: 2021.1.08.020
 
 */
 
+void imprimeLinha(int cols_B){
+  for(int i = 0; i < cols_B; i++){
+    printf("--");
+  }
+}
 
 int main(int argc, char** argv) {
 
-  // Seed the random number generator to get different results each time
   srand(time(NULL));
 
   MPI_Init(NULL, NULL);
@@ -23,69 +30,112 @@ int main(int argc, char** argv) {
   int world_size;
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-  int ROWS = world_size;
-  int COLS = world_size;
-    int* matriz_One = NULL;
-    int* matriz_Two = NULL;
-
   if (world_rank == 0) {
-    matriz_One = (int*)malloc(COLS * ROWS * sizeof(int));
-    matriz_Two = (int*)malloc(COLS * ROWS * sizeof(int));
-    for (int i = 0; i < ROWS * COLS; i++) {
-        matriz_One[i] = (int)(rand() / (float)RAND_MAX * 10 + 1);
-        matriz_Two[i] = (int)(rand() / (float)RAND_MAX * 10 + 1);
+    if(argc != 3){
+      /* Critério da quantidade de parâmetros do programa*/
+        fprintf(stderr, "ERROR: Usage --> multMatriz cols_matrix1 cols_matrix2 \n");
+        exit(1);
     }
   }
-  
-  // For each process, create a buffer that will hold a subset of the entire array
-  int *line_for_process1 = (int *)malloc(sizeof(int) * COLS);
-  assert(line_for_process1 != NULL);
 
-  int *line_for_process2 = (int *)malloc(sizeof(int) * COLS);
-  assert(line_for_process2 != NULL);
-  
-  // Scatter the random numbers from the root process to all processes in the MPI world
-  MPI_Scatter(matriz_One, COLS, MPI_INT, line_for_process1, COLS, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Scatter(matriz_Two, COLS, MPI_INT, line_for_process2, COLS, MPI_INT, 0, MPI_COMM_WORLD);
+  int rows_A = world_size;
+  int cols_A = atoi(argv[1]);
+  int rows_B = cols_A;
+  int cols_B = atoi(argv[2]);
+  int sum = 0;
 
-    int* sum_lines  = (int*)malloc(COLS * sizeof(int));
-   for (int i = 0; i < COLS; i++)
-   {
-      sum_lines[i] = line_for_process1[i] + line_for_process2[i];
-   }
+  int matriz_A[rows_A][cols_A];
+  int matriz_B[rows_B][cols_B];
+  int line_A[cols_A];
+  int vector_AB[cols_B];
+  int matriz_C[rows_A][cols_B];
 
-    // Matriz para armazenar o resultado da redução
-    int* global_result = NULL;
 
-    // Redução da soma das linhas das matrizes usando MPI_Reduce
-    if (world_rank == 0) {
-      global_result = (int*)malloc(COLS * ROWS * sizeof(int));
-      assert(global_result != NULL);
+  /* Gerando os conteúdos das matrizes & mostrando o seu conteúdo*/
+  if (world_rank == 0) {
+    printf("Size A[%d][%d]\n", rows_A, cols_A);
+    printf("Size B[%d][%d]\n", rows_B, cols_B);
+    for (int i = 0; i < rows_A ; i++) {
+      for(int j=0; j <cols_A; j++ ){
+        /* Atribuindo números aleatórios de 1 a 10 para a matriz A*/
+        matriz_A[i][j] = (int)(rand() / (float)RAND_MAX * 10 + 1);
+      }
     }
-    MPI_Gather(sum_lines, COLS, MPI_INT, global_result, COLS, MPI_INT, 0, MPI_COMM_WORLD);
-  //MPI_Gather(&sum_lines, 1, MPI_INT, sub_sum, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    for (int i = 0; i < rows_B ; i++) {
+      for(int j=0; j <cols_B; j++ ){
+        /* Atribuindo números aleatórios de 1 a 10 para a matriz B*/
+        matriz_B[i][j] = (int)(rand() / (float)RAND_MAX * 10 + 1);
+      }
+    }
+    /* Imprimindo as Matrizes A e B */
+    imprimeLinha(cols_A);
+    printf("--Matriz A--");
+    imprimeLinha(cols_A);
+    printf("\n"); 
+    for (int i = 0; i < rows_A; i++) {
+          printf("     ( ");
+            for (int j = 0; j < cols_A; j++) {
+                printf("%3d  ", matriz_A[i][j]);
+            }
+            printf(" )");
+            printf("\n");
+    }
+    printf("\n"); 
+    imprimeLinha(cols_B);
+    printf("--Matriz B--");
+    imprimeLinha(cols_B);
+    printf("\n"); 
+    for (int i = 0; i < rows_B; i++) {
+          printf("     ( ");
+            for (int j = 0; j < cols_B; j++) {
+                printf("%2d  ", matriz_B[i][j]);
+            }
+            printf(" )");
+            printf("\n");
+    }        
+  }
+  
+  /* Enviando cada linha da matriz A para os diferentes processos*/
+  MPI_Scatter(matriz_A, cols_A, MPI_INT, line_A, cols_A, MPI_INT, 0, MPI_COMM_WORLD);
+
+  /* Enviando a matriz B para TODOS os processos*/
+  MPI_Bcast(matriz_B, rows_B*cols_B, MPI_INT, 0, MPI_COMM_WORLD);
+
+  /* Barrier para sincronizar os processos - só avança quando todos chegam nesse ponto */
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  /* Realizando operação */
+  for (int i = 0; i < cols_B; i++)
+    {
+      for (int j = 0; j < cols_A; j++)
+      {
+        sum = sum + line_A[j] * matriz_B[j][i];
+      }
+      vector_AB[i] = sum;
+      //printf("%d \n",sum );
+      sum = 0;
+    }
+
+
+  /* Root recebe a linha de cada processo */
+  MPI_Gather(vector_AB, cols_B, MPI_INT, matriz_C,cols_B, MPI_INT, 0, MPI_COMM_WORLD);
 
   if (world_rank == 0) {
-    printf("-------------Matriz Resultante-------------\n");
-        for (int i = 0; i < ROWS; i++) {
-          printf("( ");
-            for (int j = 0; j < COLS; j++) {
-                printf("%2d  ", global_result[i * COLS + j]);
+    /* Imprimindo a Matriz resultante */
+    printf("\n");
+    imprimeLinha(cols_B);
+    printf("--Matriz Resultante--");
+    imprimeLinha(cols_B);
+    printf("\n");
+        for (int i = 0; i < rows_A; i++) {
+          printf("     ( ");
+            for (int j = 0; j < cols_B; j++) {
+                printf("%2d  ", matriz_C[i][j]);
             }
             printf(" )");
             printf("\n");
         }
-        free(global_result);
   }
-
-  // Clean up
-  if (world_rank == 0) {
-    free(sum_lines);
-    free(matriz_One);
-    free(matriz_Two);
-  }
-  free(line_for_process1);
-  free(line_for_process2);
 
   MPI_Barrier(MPI_COMM_WORLD);
   MPI_Finalize();
